@@ -1,0 +1,220 @@
+---
+title: "Portfolio 1 - Ethanol"
+author: "Angelina Allen "
+date: "2024-05-07"
+output: 
+  html_document:
+    self_contained: true
+---
+
+```{r setup, include=FALSE, purl=FALSE}
+# Use echo = FALSE for Portfolio assignments
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+#warning = FALSE, message = FALSE
+```
+
+```{r metadata, echo=FALSE}
+# Author:  Angelina
+# Date:    2024-05-07
+# Purpose: Portfolio 1 - Ethanol
+#-------------------------------------------------------------------------------
+```
+
+
+```{r packages}
+# Load packages
+suppressPackageStartupMessages(library("tidyverse")); theme_set(theme_bw())
+library("knitr")
+library("kableExtra")
+```
+
+## Introduction
+
+After cleaning, the gas_mileage_data.csv data set consists of 347 observations from data collected on a 2011 Toyota Sienna. The data was collected by recording the number of miles on the trip meter(then resetting the trip meter), the amount of gas, and the type of gas in terms of the octane and ethanol percentage. In the data collection, the goal was to see how the miles per gallon are affected by the presence of ethanol. In particular, this experiment aims to answer the scientific question, "How is gas mileage (miles per gallon) different when using gas with no ethanol compared to gas with 10% ethanol?" 
+
+## Data
+
+```{r summary-statistics}
+#input data
+data             <- read_csv("gas_mileage_data.csv")
+
+gas_data         <- data |>
+                     drop_na(c('mpg', 'ethanol'))
+
+
+cleaned_gas_data <- gas_data %>%
+  mutate(ethanol = if_else(ethanol == 10, "Yes", "No"))
+
+# Calculate summary statistics for the data
+s <- cleaned_gas_data |>
+  summarize(
+     n = n(),
+     mean_mpg = mean(mpg),
+     median_mpg = median(mpg),
+     min_mpg = min(mpg),
+     max_mpg = max(mpg),
+     Ethanol_Yes = sum(ethanol == "Yes", na.rm = TRUE),
+     Ethanol_No = sum(ethanol == "No", na.rm = TRUE)
+  )
+
+```
+
+The collected data has 347 observations with seven variables (date, mpg, gallons, USD(price), miles, ethanol, and octane). For this specific question, we will only look at the mpg and ethanol variables. The table below provides a summary statics of the two variables. Showing the total observation of the data, the mean, median, min, and max of mpg, and the counts of the presence of ethanol. 
+
+```{r summary-statistics-table}
+kable(s, 
+      format = "html", 
+      caption = "Summary Statistic of mpg and ethanol     variables",
+      col.names = c("Total Obs",
+                    "mean(mpg)",
+                    "median(mpg)",
+                    "min(mpg)",
+                    "max(mpg)", 
+                    "Yes(ethanol)",
+                    "No(ethanol)")) %>%
+  kable_styling()
+```
+
+The figure below displays a box plot with jitter points of the miles per gallon versus 10% ethanol. When comparing the presence of 10% ethanol and no presence, this figure suggests that the presence of no 10% ethanol has a slightly higher average mpg than the presence of ethanol. Another notable thing here is that because we are doing a box plot with jitter it records the outliers twice. 
+
+
+```{r exploratory}
+# Create exploratory plot of the data
+g<- ggplot(cleaned_gas_data, 
+             aes(
+               x = ethanol,
+               y = mpg, 
+               color = ethanol)) +
+  geom_boxplot()+
+  geom_jitter() +
+  labs(
+    x = "Presence of 10% Ethanol(Yes/No)",
+    y = "Miles Per Gallon(mpg)",
+    title = "Explanatory Plot of the Response vs the Explanatory"
+  )
+g
+```
+
+## Results
+
+```{r model-interaction}
+# Fit linear regression model 
+m            <- lm(mpg ~ ethanol, 
+                   data = cleaned_gas_data)
+```
+
+Since we are working with gas mileage as our response this variable is continuous and a simple linear regression makes the most sense. There will also be no interaction since we only have one explanatory variable.  
+The Simple Linear Regression model assumes: 
+$$Y_i \stackrel{ind}{\sim} N(\beta_0 + \beta_1X_i,\sigma^2)$$
+for $i = 1$,..., n or , equivalently, 
+$$Y_i = \beta_0 + \beta_1X_i + \epsilon_i$$ $$\epsilon_i\stackrel{ind}{\sim} N(0,\sigma^2)$$ 
+where, for observations $i$, 
+ 
+ * $Y_i$ is the value of the response variable
+ * $X_i$ is the value of the explanatory variable
+ * $\epsilon_i$ is the error 
+
+The model parameters are 
+ 
+ * the intercept $\beta_0$
+ * the slop $\beta_1$
+ * the error variance $\sigma^2$
+
+Where the response variable ($Y_i$) is the miles per gallon, the explanatory($X_i$) is the presence of 10% ethanol (Yes for ethanol, No for no ethanol), and the error term ($\epsilon_i$)  assumed to follow a normal distribution with mean 0 and variance $\sigma^2$. 
+
+Below is a plot of the estimated mean number of gas mileage and 95% confidence intervals. As we saw with the original data, the mean gas mileage for no ethanol is slightly higher than the mean gas mileage for the presence of ethanol.
+ 
+```{r predictions}
+nd <- cleaned_gas_data |>
+  select(ethanol) |>
+  unique()
+
+# Construct confidence intervals
+ci <- bind_cols(
+  nd,
+  predict(m,
+          newdata = nd,
+          interval = "confidence") |>
+    as.data.frame() |>
+    rename(mpg = fit)
+)
+
+# Plot with ggplot
+pg <- ggplot(cleaned_gas_data, 
+             aes(
+               x = ethanol,
+               y = mpg, 
+               color = ethanol)) +
+  geom_jitter() +
+  geom_pointrange(
+    data = ci, 
+    aes(
+      ymin = lwr, 
+      ymax = upr
+    ), 
+    col = "purple") +
+  labs(
+    x = "Presence of 10% Ethanol (Yes/No)",
+    y = "Miles Per Gallon (mpg)",
+    title = "Effect of 10% Ethanol Presence on Estimated Mean Gas Mileag with 95% Confidence Intervals",
+    subtitle = "Simple Linear Regression Model"
+  )
+
+pg
+
+```
+
+```{r}
+#calculate uncertainty
+
+ethanol_present <- cleaned_gas_data |>
+  filter(ethanol == "Yes")
+ethanol_absent <- cleaned_gas_data |>
+  filter(ethanol == "No")
+
+mean_mpg_ethanol_present <- mean(ethanol_present$mpg)
+mean_mpg_ethanol_absent <- mean(ethanol_absent$mpg)
+
+ci_diff_means <- t.test(ethanol_present$mpg, ethanol_absent$mpg)$conf.int
+```
+
+Additionally, we calculated the estimate with uncertainty for the difference in gas mileage when there is 10% ethanol vs when there isn't. The interval is `r ci_diff_means`. Since the confidence interval does not include zero there is a statistically significant difference in mean gas mileage between presence of 10% ethanol and no presence of 10% ethanol. 
+
+
+## Discussion
+
+```{r ci}
+# Construct confidence interval to answer scientific question
+ci <- bind_cols(
+  nd,
+  predict(m,
+          newdata = nd,
+          interval = "confidence") |>
+    as.data.frame() |>
+    rename(mpg = fit)
+)
+
+```
+
+The data was collected on a 2011 Toyota Sienna and our goal was to see how the miles per gallon are affected by the presence of 10% ethanol. Precisely, we want to explore the difference between no presence and the presence of 10% ethanol. We found that with no presence of 10% ethanol there is a higher average of gas mileage than there was for a presence of 10% ethanol. A 95% confidence interval for the mean gas mileage with no 10% ethanol is (`r ci$lwr[2]`, `r ci$upr[2]`). Additionally, a 95% confidence interval for the mean gas mileage with a presence of 10% ethanol is (`r ci$lwr[1]`, `r ci$upr[1]`). 
+
+The data was collected sequentially each time it was filled up, and since the trip meter was reset each time after filling up, this could create a source of dependence between the observations. Looking at the diagnostic plot, we see a clear pattern in the residuals, potentially indicating a violation of the independence assumption. This makes sense because we are working with a categorical explanatory variable where there might be a grouping effect that may exhibit similar patterns or trends. This can violate independence if the groups are not truly independent of each other. While the data are counted, and thus normality is technically violated, the qq-plots of the residuals indicate the normality assumption is reasonable. In the residual plot, the variability of both presences of 10% ethanol has equal constant variance. 
+
+From the information about our data collection, it needs to be clarified if it is randomly assigned. If data on ethanol presence and gas mileage were collected on random cars and ethanol presence was randomly assigned, then we can claim that the presence of 10% ethanol caused the difference in gas mileage. Since the car and 10% ethanol presence are not a random sample from any population, we must be careful in extending these results to a larger population. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
